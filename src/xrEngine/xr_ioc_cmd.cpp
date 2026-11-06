@@ -84,6 +84,21 @@ public:
 	}
 };
 
+// Lightweight build identifier for testing; avoids silently confusing v0.4
+// test executables with the normal Anomaly executable in a large MO2 setup.
+class CCC_NLCPUAbout : public IConsole_Command
+{
+public:
+    CCC_NLCPUAbout(LPCSTR N) : IConsole_Command(N) { bEmptyArgsHandled = TRUE; }
+    void Execute(LPCSTR) override
+    {
+        Msg("* [NLCPU] v0.4-dev | base MT-TEST 2026.10.11 | DX11 grass instancing");
+        Msg("* [NLCPU] stable branch: v0.2 Build #5 | dev branch: work/nlcpu-v04-engine-overhaul");
+        Msg("* [NLCPU] commands: nlcpu_profile 1/0; nlcpu_grass_stats 1/0");
+        Msg("* [NLCPU] dev build only; no gameplay or save-format changes intended");
+    }
+};
+
 //-----------------------------------------------------------------------
 #ifdef DEBUG_MEMORY_MANAGER
 class CCC_MemStat : public IConsole_Command
@@ -1096,6 +1111,7 @@ void CCC_Register()
 	// General
 	CMD1(CCC_Help, "help");
 	CMD1(CCC_Quit, "quit");
+    CMD1(CCC_NLCPUAbout, "nlcpu_about");
 	CMD1(CCC_Start, "start");
 	CMD1(CCC_Disconnect, "disconnect");
 	CMD1(CCC_SaveCFG, "cfg_save");

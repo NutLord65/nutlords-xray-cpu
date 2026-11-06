@@ -72,20 +72,24 @@ namespace
         unsigned count = 0;
         double sum_frame = 0;
         double sum_update = 0;
+        double sum_prepare = 0;
+        double sum_limiter = 0;
         double sum_render = 0;
         double sum_wait = 0;
 
         void Reset()
         {
             count = 0;
-            sum_frame = sum_update = sum_render = sum_wait = 0;
+            sum_frame = sum_update = sum_prepare = sum_limiter = sum_render = sum_wait = 0;
         }
 
-        void Add(double frame, double update, double render, double wait)
+        void Add(double frame, double update, double prepare, double limiter, double render, double wait)
         {
             frame_ms[count++] = frame;
             sum_frame += frame;
             sum_update += update;
+            sum_prepare += prepare;
+            sum_limiter += limiter;
             sum_render += render;
             sum_wait += wait;
             if (count < kNLCPUWindowFrames)
@@ -98,9 +102,9 @@ namespace
 
             const unsigned p95 = (count * 95 + 99) / 100 - 1;
             const unsigned p99 = (count * 99 + 99) / 100 - 1;
-            Msg("* [NLCPU PROFILE] %u frames: main-thread avg=%.2f p95=%.2f p99=%.2f max=%.2f ms | update=%.2f render=%.2f wait=%.2f ms",
+            Msg("* [NLCPU PROFILE] %u frames: main-thread avg=%.2f p95=%.2f p99=%.2f max=%.2f ms | update=%.2f prepare=%.2f limiter=%.2f render=%.2f wait=%.2f ms",
                 count, sum_frame / count, ordered[p95], ordered[p99], ordered[count - 1],
-                sum_update / count, sum_render / count, sum_wait / count);
+                sum_update / count, sum_prepare / count, sum_limiter / count, sum_render / count, sum_wait / count);
             Reset();
         }
     };
@@ -443,6 +447,8 @@ void CRenderDevice::on_idle()
     }
     const bool nlcpu_sample = nlcpu_enabled && b_is_Active && !Paused() && !dwPrecacheFrame;
     NLCPUClock::time_point nlcpu_frame_start, nlcpu_update_start, nlcpu_update_end;
+    NLCPUClock::time_point nlcpu_prepare_start, nlcpu_prepare_end;
+    NLCPUClock::time_point nlcpu_limiter_start, nlcpu_limiter_end;
     NLCPUClock::time_point nlcpu_render_start, nlcpu_render_end, nlcpu_wait_start, nlcpu_wait_end;
     if (nlcpu_sample)
         nlcpu_frame_start = NLCPUClock::now();
@@ -475,7 +481,11 @@ void CRenderDevice::on_idle()
 
     if (nlcpu_sample) nlcpu_update_start = NLCPUClock::now();
 	FrameMove();
-    if (nlcpu_sample) nlcpu_update_end = NLCPUClock::now();
+    if (nlcpu_sample)
+    {
+        nlcpu_update_end = NLCPUClock::now();
+        nlcpu_prepare_start = nlcpu_update_end;
+    }
 
     if (g_pGamePersistent != nullptr)
     {
@@ -566,6 +576,11 @@ void CRenderDevice::on_idle()
 	Device.LuaGCCount = 0;
 
 	secondary_tasks.run(&XRay::Engine::GameThread);
+    if (nlcpu_sample)
+    {
+        nlcpu_prepare_end = NLCPUClock::now();
+        nlcpu_limiter_start = nlcpu_prepare_end;
+    }
 	
 #ifdef ECO_RENDER // ECO_RENDER START
 	if (Device.Paused() || IsMainMenuActive() || ps_framelimiter)
@@ -592,7 +607,11 @@ void CRenderDevice::on_idle()
 	}
 #endif // ECO_RENDER END
 
-    if (nlcpu_sample) nlcpu_render_start = NLCPUClock::now();
+    if (nlcpu_sample)
+    {
+        nlcpu_limiter_end = NLCPUClock::now();
+        nlcpu_render_start = nlcpu_limiter_end;
+    }
 #ifndef DEDICATED_SERVER
 	Statistic->RenderTOTAL_Real.FrameStart();
 	Statistic->RenderTOTAL_Real.Begin();
@@ -630,6 +649,8 @@ void CRenderDevice::on_idle()
         nlcpu_window.Add(
             ms(nlcpu_frame_start, nlcpu_wait_end),
             ms(nlcpu_update_start, nlcpu_update_end),
+            ms(nlcpu_prepare_start, nlcpu_prepare_end),
+            ms(nlcpu_limiter_start, nlcpu_limiter_end),
             ms(nlcpu_render_start, nlcpu_render_end),
             ms(nlcpu_wait_start, nlcpu_wait_end));
     }
