@@ -52,6 +52,7 @@ float GoToValue(float& current, float go_to)
 }
 
 #ifdef USE_DX11
+extern int g_nlcpu_grass_stats;
 // f32 -> f16 (round-to-nearest; inputs are tame: [-1..1] normals, [0..1] scalars)
 ICF u16 dm_f32tof16(float v)
 {
@@ -195,6 +196,26 @@ void CDetailManager::hw_Fill_Instances()
         }
     }
 
+    // Nothing visible: skip the costly GPU map/discard and leave every draw
+    // range empty. Still clear per-pass lists so they cannot leak into a later
+    // shadow pass or the next frame.
+    if (required == 0)
+    {
+        for (u32 vid = 0; vid < 3; ++vid)
+        {
+            vis_list& list = m_visibles[vid];
+            for (u32 obj = 0; obj < objects.size(); ++obj)
+            {
+                hw_inst_base[vid][obj] = 0;
+                hw_inst_count[vid][obj] = 0;
+                if (!list[obj].empty())
+                    list[obj].clear_not_free();
+            }
+        }
+        hw_frame_filled = Device.dwFrame;
+        return;
+    }
+
     if (required > hw_instanceCapacity)
     {
         // D3D11_BUFFER_DESC::ByteWidth uses UINT. This is a hard API bound,
@@ -302,6 +323,14 @@ void CDetailManager::hw_Fill_Instances()
 	hw_instanceVB->Unmap();
 #endif
 
+
+    if (g_nlcpu_grass_stats && Device.dwFrame % 300 == 0)
+    {
+        Msg("* [NLCPU GRASS] frame=%u candidates=%llu packed=%u faded=%llu capacity=%u buffer=%.1f MiB",
+            Device.dwFrame, (unsigned long long)required, instTotal,
+            (unsigned long long)(required - instTotal), hw_instanceCapacity,
+            double(hw_instanceCapacity) * hw_InstanceStride / (1024.0 * 1024.0));
+    }
 	hw_frame_filled = Device.dwFrame;
 }
 #endif // USE_DX11 (hw_Fill_Instances)

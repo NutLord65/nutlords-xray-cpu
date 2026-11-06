@@ -58,6 +58,8 @@ BOOL mt_calc_bones = TRUE;
 // NLCPU v0.3 diagnostic sampler. Disabled by default; no work is done unless
 // the developer explicitly enables it via the nlcpu_profile console command.
 int g_nlcpu_profile = 0;
+// Enabled manually for grass batch/capacity diagnostics, zero extra work when off.
+int g_nlcpu_grass_stats = 0;
 
 namespace
 {
