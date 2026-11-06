@@ -10,11 +10,72 @@
 #include "Irenderable.h"
 #include "../../Include/xrRender/Kinematics.h"
 
+#include <atomic>
+#include <chrono>
+
+// Lightweight wall-time probes for the MT job bodies. The clock is only
+// queried when the NLCPU developer profiler is enabled in the game console.
+namespace
+{
+    using NLCPUWorkerClock = std::chrono::steady_clock;
+    std::atomic<bool> nlcpu_worker_enabled{false};
+    std::atomic<u64> nlcpu_prerender_us{0};
+    std::atomic<u64> nlcpu_posttransforms_us{0};
+    std::atomic<u64> nlcpu_bones_us{0};
+    std::atomic<u64> nlcpu_game_us{0};
+
+    class NLCPUWorkerScope
+    {
+        std::atomic<u64>& output;
+        bool active;
+        NLCPUWorkerClock::time_point start;
+
+    public:
+        explicit NLCPUWorkerScope(std::atomic<u64>& target)
+            : output(target), active(nlcpu_worker_enabled.load(std::memory_order_relaxed))
+        {
+            if (active)
+                start = NLCPUWorkerClock::now();
+        }
+
+        ~NLCPUWorkerScope()
+        {
+            if (active)
+            {
+                const auto elapsed = std::chrono::duration_cast<std::chrono::microseconds>(
+                    NLCPUWorkerClock::now() - start).count();
+                output.store(static_cast<u64>(elapsed), std::memory_order_relaxed);
+            }
+        }
+    };
+}
+
+void XRay::Engine::NLCPUWorkerProfilerBeginFrame(bool enable)
+{
+    // Previous frame's workers must have finished before calling this.
+    nlcpu_worker_enabled.store(enable, std::memory_order_relaxed);
+    nlcpu_prerender_us.store(0, std::memory_order_relaxed);
+    nlcpu_posttransforms_us.store(0, std::memory_order_relaxed);
+    nlcpu_bones_us.store(0, std::memory_order_relaxed);
+    nlcpu_game_us.store(0, std::memory_order_relaxed);
+}
+
+XRay::Engine::NLCPUWorkerProfile XRay::Engine::NLCPUWorkerProfilerRead()
+{
+    NLCPUWorkerProfile value;
+    value.prerender_ms = nlcpu_prerender_us.load(std::memory_order_relaxed) / 1000.0;
+    value.posttransforms_ms = nlcpu_posttransforms_us.load(std::memory_order_relaxed) / 1000.0;
+    value.bones_ms = nlcpu_bones_us.load(std::memory_order_relaxed) / 1000.0;
+    value.game_ms = nlcpu_game_us.load(std::memory_order_relaxed) / 1000.0;
+    return value;
+}
+
 BOOL mt_Scheduler = TRUE;
 BOOL mt_SchedulerRT = FALSE;
 
 void XRay::Engine::PreRenderThread()
 {
+    NLCPUWorkerScope nlcpu_scope(nlcpu_prerender_us);
 	PROF_THREAD("Secondary Task 1");
 
 	if (g_pGamePersistent && g_pGamePersistent->pEnvironment && g_pGamePersistent->pEnvironment->eff_Rain)
@@ -32,6 +93,7 @@ void XRay::Engine::PreRenderThread()
 
 void XRay::Engine::PreRenderPostTransformsThread()
 {
+    NLCPUWorkerScope nlcpu_scope(nlcpu_posttransforms_us);
     PROF_THREAD("Secondary Task 1.1");
     {
         PROF_EVENT("seqParallelRender");
@@ -50,6 +112,7 @@ struct SpatialSnapshot
 };
 void XRay::Engine::CalculateBonesThread()
 {
+    NLCPUWorkerScope nlcpu_scope(nlcpu_bones_us);
 	PROF_THREAD("Secondary Task 3");
 
 	PROF_EVENT("CalculateBones");
@@ -123,6 +186,7 @@ extern BOOL psLua_ParallelGC;
 int psLua_ParallelGC_CallAmount = 25;
 void XRay::Engine::GameThread()
 {
+    NLCPUWorkerScope nlcpu_scope(nlcpu_game_us);
 	PROF_THREAD("Secondary Task 2")
 		
 	// we has granted permission to execute

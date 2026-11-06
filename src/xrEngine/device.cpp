@@ -76,14 +76,20 @@ namespace
         double sum_limiter = 0;
         double sum_render = 0;
         double sum_wait = 0;
+        double sum_worker_pre = 0;
+        double sum_worker_post = 0;
+        double sum_worker_bones = 0;
+        double sum_worker_game = 0;
 
         void Reset()
         {
             count = 0;
             sum_frame = sum_update = sum_prepare = sum_limiter = sum_render = sum_wait = 0;
+            sum_worker_pre = sum_worker_post = sum_worker_bones = sum_worker_game = 0;
         }
 
-        void Add(double frame, double update, double prepare, double limiter, double render, double wait)
+        void Add(double frame, double update, double prepare, double limiter, double render, double wait,
+            const XRay::Engine::NLCPUWorkerProfile& workers)
         {
             frame_ms[count++] = frame;
             sum_frame += frame;
@@ -92,6 +98,10 @@ namespace
             sum_limiter += limiter;
             sum_render += render;
             sum_wait += wait;
+            sum_worker_pre += workers.prerender_ms;
+            sum_worker_post += workers.posttransforms_ms;
+            sum_worker_bones += workers.bones_ms;
+            sum_worker_game += workers.game_ms;
             if (count < kNLCPUWindowFrames)
                 return;
 
@@ -105,6 +115,8 @@ namespace
             Msg("* [NLCPU PROFILE] %u frames: main-thread avg=%.2f p95=%.2f p99=%.2f max=%.2f ms | update=%.2f prepare=%.2f limiter=%.2f render=%.2f wait=%.2f ms",
                 count, sum_frame / count, ordered[p95], ordered[p99], ordered[count - 1],
                 sum_update / count, sum_prepare / count, sum_limiter / count, sum_render / count, sum_wait / count);
+            Msg("* [NLCPU WORKERS] %u frames avg: game=%.2f prerender=%.2f posttransforms=%.2f bones=%.2f ms",
+                count, sum_worker_game / count, sum_worker_pre / count, sum_worker_post / count, sum_worker_bones / count);
             Reset();
         }
     };
@@ -450,6 +462,7 @@ void CRenderDevice::on_idle()
     NLCPUClock::time_point nlcpu_prepare_start, nlcpu_prepare_end;
     NLCPUClock::time_point nlcpu_limiter_start, nlcpu_limiter_end;
     NLCPUClock::time_point nlcpu_render_start, nlcpu_render_end, nlcpu_wait_start, nlcpu_wait_end;
+    XRay::Engine::NLCPUWorkerProfilerBeginFrame(nlcpu_sample);
     if (nlcpu_sample)
         nlcpu_frame_start = NLCPUClock::now();
 
@@ -652,7 +665,8 @@ void CRenderDevice::on_idle()
             ms(nlcpu_prepare_start, nlcpu_prepare_end),
             ms(nlcpu_limiter_start, nlcpu_limiter_end),
             ms(nlcpu_render_start, nlcpu_render_end),
-            ms(nlcpu_wait_start, nlcpu_wait_end));
+            ms(nlcpu_wait_start, nlcpu_wait_end),
+            XRay::Engine::NLCPUWorkerProfilerRead());
     }
 
 	if (psLua_ParallelGC_debug && psLua_ParallelGC && Device.LuaGCDebug)
