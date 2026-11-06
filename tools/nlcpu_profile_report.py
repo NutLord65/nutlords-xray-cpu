@@ -76,6 +76,12 @@ def summarize(parsed: dict) -> dict:
                 sum(w["frames"] * w["phases_ms"][name] for w in available) / count, 3
             )
 
+    # Do not divide against older windows that lack callback measurements.
+    callback_windows = [w for w in windows if "callbacks" in w["phases_ms"] and w["frames"] > 0]
+    matched_update = sum(w["frames"] * w["phases_ms"]["update"] for w in callback_windows)
+    matched_callbacks = sum(w["frames"] * w["phases_ms"]["callbacks"] for w in callback_windows)
+    callback_share = round(100.0 * matched_callbacks / matched_update, 2) if matched_update > 0 else None
+
     return {
         "cpu": {
             "windows": len(windows),
@@ -85,6 +91,8 @@ def summarize(parsed: dict) -> dict:
             "worst_window_p99_ms": max((w["p99_ms"] for w in windows), default=None),
             "worst_observed_frame_ms": max((w["max_ms"] for w in windows), default=None),
             "weighted_phases_avg_ms": phases,
+            "callbacks_share_of_update_pct": callback_share,
+            "callbacks_coverage_frames": sum(w["frames"] for w in callback_windows),
         },
         "grass": {
             "samples": len(grass),
