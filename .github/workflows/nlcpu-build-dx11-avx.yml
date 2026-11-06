@@ -48,6 +48,34 @@ jobs:
           msbuild src/engine-vs2022.sln /m /p:Configuration=DX11-AVX /p:Platform=x64 /verbosity:minimal /bl:nlcpu-build.binlog
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
+      - name: Write DX11-AVX build provenance
+        if: success()
+        shell: pwsh
+        run: |
+          $exe = "_build/_game/bin_dbg/AnomalyDX11AVX.exe"
+          if (-not (Test-Path $exe)) { throw "Built engine missing: $exe" }
+          $hash = (Get-FileHash -Algorithm SHA256 $exe).Hash.ToLowerInvariant()
+          @(
+            "Project=NutLord's X-Ray CPU"
+            "Branch=$env:GITHUB_REF_NAME"
+            "Commit=$env:GITHUB_SHA"
+            "Configuration=DX11-AVX"
+            "Platform=x64"
+            "EngineBase=MT-TEST-2026.10.11"
+            "ShaderCompatibility=NLCPU-SSS23-dev"
+            "ExecutableSHA256=$hash"
+            "Status=development-build-not-runtime-verified"
+          ) | Set-Content -Encoding utf8 NLCPU-BUILD-MANIFEST.txt
+
+      - name: Upload build provenance
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: NLCPU-MT-DX11-AVX-provenance
+          path: NLCPU-BUILD-MANIFEST.txt
+          if-no-files-found: error
+          retention-days: 14
+
       - name: Upload built EXEs (development only)
         if: success()
         uses: actions/upload-artifact@v4
