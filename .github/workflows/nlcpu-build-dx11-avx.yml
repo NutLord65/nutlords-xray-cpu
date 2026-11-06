@@ -1,0 +1,59 @@
+name: NLCPU - MT DX11-AVX (development build)
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - work/grass-mt-20261011
+    paths:
+      - 'src/**'
+      - '.gitmodules'
+      - '.github/workflows/nlcpu-build-dx11-avx.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nlcpu-dx11avx-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build DX11-AVX on Windows (VS2022)
+    runs-on: windows-latest
+    timeout-minutes: 90
+
+    steps:
+      - name: Check out engine source and submodules
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Configure MSBuild
+        uses: microsoft/setup-msbuild@v2
+        with:
+          msbuild-architecture: x64
+
+      - name: Compile DX11-AVX x64
+        shell: pwsh
+        run: |
+          msbuild src/engine-vs2022.sln /m /p:Configuration=DX11-AVX /p:Platform=x64 /verbosity:minimal /bl:nlcpu-build.binlog
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Upload built EXEs (development only)
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: NLCPU-MT-DX11-AVX-executables
+          path: _build/_game/bin_dbg/*.exe
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload MSBuild diagnostic log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: NLCPU-MT-DX11-AVX-buildlog
+          path: nlcpu-build.binlog
+          if-no-files-found: ignore
+          retention-days: 14
