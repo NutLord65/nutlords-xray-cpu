@@ -268,6 +268,13 @@ void CCustomMonster::mk_orientation(Fvector& dir, Fmatrix& mR)
 	}
 }
 
+BOOL CCustomMonster::net_Relevant()
+{
+    // During net_Spawn the initial network snapshot is not yet available.
+    // Do not export an empty NET queue during saves / level transitions.
+    return inherited::net_Relevant() && !NET.empty();
+}
+
 void CCustomMonster::net_Export(NET_Packet& P) // export to server
 {
 	R_ASSERT(Local());
