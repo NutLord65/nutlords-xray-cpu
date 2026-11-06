@@ -40,7 +40,7 @@ class ParseTests(unittest.TestCase):
         old = ("* [NLCPU PROFILE] 300 frames: main-thread avg=10.00 "
                "p95=12.00 p99=13.00 max=14.00 ms | update=8.00 "
                "render=1.00 wait=1.00 ms")
-        result = report.summarize(report.parse_text(new + "\\n" + old))["cpu"]
+        result = report.summarize(report.parse_text(new + "\n" + old))["cpu"]
         self.assertEqual(result["callbacks_share_of_update_pct"], 75.0)
         self.assertEqual(result["callbacks_coverage_frames"], 300)
 
