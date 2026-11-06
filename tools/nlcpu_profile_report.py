@@ -18,7 +18,7 @@ PREFIX = re.compile(
     r"main-thread avg=(?P<avg>[\d.]+) p95=(?P<p95>[\d.]+) "
     r"p99=(?P<p99>[\d.]+) max=(?P<max>[\d.]+) ms\s*\|\s*(?P<phases>.*)"
 )
-PHASE = re.compile(r"(update|prepare|limiter|render|wait)=([\d.]+)")
+PHASE = re.compile(r"(update|callbacks|prepare|limiter|render|wait)=([\d.]+)")
 GRASS = re.compile(
     r"\[NLCPU GRASS\]\s+frame=(\d+) candidates=(\d+) "
     r"packed=(\d+) faded=(\d+) capacity=(\d+) buffer=([\d.]+) MiB"
@@ -66,7 +66,7 @@ def summarize(parsed: dict) -> dict:
             return None
         return round(sum(w["frames"] * w[key] for w in windows) / frames, 3)
 
-    phase_names = ("update", "prepare", "limiter", "render", "wait")
+    phase_names = ("update", "callbacks", "prepare", "limiter", "render", "wait")
     phases = {}
     for name in phase_names:
         available = [w for w in windows if name in w["phases_ms"]]
@@ -75,6 +75,12 @@ def summarize(parsed: dict) -> dict:
             phases[name] = round(
                 sum(w["frames"] * w["phases_ms"][name] for w in available) / count, 3
             )
+
+    # Do not divide against older windows that lack callback measurements.
+    callback_windows = [w for w in windows if "callbacks" in w["phases_ms"] and w["frames"] > 0]
+    matched_update = sum(w["frames"] * w["phases_ms"]["update"] for w in callback_windows)
+    matched_callbacks = sum(w["frames"] * w["phases_ms"]["callbacks"] for w in callback_windows)
+    callback_share = round(100.0 * matched_callbacks / matched_update, 2) if matched_update > 0 else None
 
     return {
         "cpu": {
@@ -85,6 +91,8 @@ def summarize(parsed: dict) -> dict:
             "worst_window_p99_ms": max((w["p99_ms"] for w in windows), default=None),
             "worst_observed_frame_ms": max((w["max_ms"] for w in windows), default=None),
             "weighted_phases_avg_ms": phases,
+            "callbacks_share_of_update_pct": callback_share,
+            "callbacks_coverage_frames": sum(w["frames"] for w in callback_windows),
         },
         "grass": {
             "samples": len(grass),

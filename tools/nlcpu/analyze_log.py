@@ -18,7 +18,8 @@ PROFILE_RE = re.compile(
     r"\[NLCPU PROFILE\]\s+(\d+) frames:\s+main-thread avg=" + NUM
     + r"\s+p95=" + NUM + r"\s+p99=" + NUM + r"\s+max=" + NUM
     + r"\s+ms\s*\|\s*update=" + NUM
-    + r"\s+(?:prepare=" + NUM + r"\s+limiter=" + NUM + r"\s+)?render="
+    + r"\s+(?:callbacks=" + NUM + r"\s+)?"
+    + r"(?:prepare=" + NUM + r"\s+limiter=" + NUM + r"\s+)?render="
     + NUM + r"\s+wait=" + NUM + r"\s+ms"
 )
 GRASS_RE = re.compile(
@@ -27,7 +28,7 @@ GRASS_RE = re.compile(
     r"\s+buffer=" + NUM + r"\s+MiB"
 )
 PROFILE_FIELDS = ["frames", "main_avg_ms", "main_p95_ms", "main_p99_ms", "main_max_ms",
-                  "update_ms", "prepare_ms", "limiter_ms", "render_ms", "wait_ms"]
+                  "update_ms", "callbacks_ms", "prepare_ms", "limiter_ms", "render_ms", "wait_ms"]
 GRASS_FIELDS = ["frame", "candidates", "packed", "faded", "capacity", "buffer_mib"]
 
 
@@ -59,11 +60,19 @@ def summary(profiles: list[dict], grass: list[dict]) -> dict:
         return round(sum(p[field] * p["frames"] for p in valid) / denom, 3) if denom else None
 
     p99s = [p["main_p99_ms"] for p in profiles]
+    # Use only windows containing BOTH phase measurements. Old logs do not have callbacks.
+    callback_windows = [p for p in profiles if p.get("callbacks_ms") is not None and p["frames"] > 0]
+    matched_update_ms = sum(p["update_ms"] * p["frames"] for p in callback_windows)
+    matched_callbacks_ms = sum(p["callbacks_ms"] * p["frames"] for p in callback_windows)
+    callback_share = round(100.0 * matched_callbacks_ms / matched_update_ms, 2) if matched_update_ms > 0 else None
     result = {
         "profile_windows": len(profiles),
         "sampled_main_thread_frames": total_frames,
         "weighted_main_mean_ms": wmean("main_avg_ms"),
         "weighted_update_mean_ms": wmean("update_ms"),
+        "weighted_callbacks_mean_ms": wmean("callbacks_ms"),
+        "callbacks_share_of_update_pct": callback_share,
+        "callbacks_coverage_frames": sum(p["frames"] for p in callback_windows),
         "weighted_prepare_mean_ms": wmean("prepare_ms"),
         "weighted_limiter_mean_ms": wmean("limiter_ms"),
         "weighted_render_mean_ms": wmean("render_ms"),
@@ -77,6 +86,8 @@ def summary(profiles: list[dict], grass: list[dict]) -> dict:
         "warnings": [
             "Per-window p95/p99 are already aggregates; median_window_p99_ms is NOT a global p99.",
             "Main-thread timing excludes some engine work and is not a pure GPU frame time.",
+            "callbacks_ms is included within update_ms and includes ALL seqFrame callbacks, not just Lua or AI.",
+            "callbacks_share_of_update_pct uses matching sampled windows only; not a share of total CPU or GPU time.",
             "Do not compare two logs without matching map, position, weather, graphics settings and camera route."
         ],
     }

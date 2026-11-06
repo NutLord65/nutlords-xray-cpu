@@ -18,10 +18,31 @@ class TestNLCPULog(unittest.TestCase):
         self.assertEqual(p[0]['limiter_ms'], 0)
         self.assertEqual(summary(p, g)['weighted_main_mean_ms'], 10.8)
 
+    def test_v04_callbacks_are_subset_of_update(self):
+        p, g = self.read('* [NLCPU PROFILE] 300 frames: main-thread avg=12.50 p95=14.20 p99=15.50 max=21.00 ms | update=4.10 callbacks=3.20 prepare=1.40 limiter=0.00 render=6.20 wait=0.80 ms\n')
+        self.assertEqual(p[0]['callbacks_ms'], 3.2)
+        self.assertEqual(summary(p, g)['weighted_callbacks_mean_ms'], 3.2)
+        self.assertLessEqual(p[0]['callbacks_ms'], p[0]['update_ms'])
+
     def test_legacy_v03_profile(self):
         p, _ = self.read('2026-11-06 * [NLCPU PROFILE] 300 frames: main-thread avg=10.80 p95=13.20 p99=15.50 max=22.00 ms | update=1.30 render=6.90 wait=0.50 ms\n')
+        self.assertIsNone(p[0]['callbacks_ms'])
         self.assertEqual(p[0]['prepare_ms'], None)
         self.assertEqual(p[0]['render_ms'], 6.9)
+
+    def test_callback_ratio_uses_matching_windows_only(self):
+        p, _ = self.read(
+            '* [NLCPU PROFILE] 300 frames: main-thread avg=10.00 p95=12.00 p99=13.00 max=14.00 ms | update=4.00 callbacks=3.00 prepare=0.00 limiter=0.00 render=5.00 wait=1.00 ms\n'
+            '* [NLCPU PROFILE] 300 frames: main-thread avg=10.00 p95=12.00 p99=13.00 max=14.00 ms | update=8.00 prepare=0.00 limiter=0.00 render=1.00 wait=1.00 ms\n'
+        )
+        result = summary(p, [])
+        self.assertEqual(result["callbacks_share_of_update_pct"], 75.0)
+        self.assertEqual(result["callbacks_coverage_frames"], 300)
+
+    def test_callback_ratio_empty_or_zero_update(self):
+        p, _ = self.read('* [NLCPU PROFILE] 300 frames: main-thread avg=10.00 p95=12.00 p99=13.00 max=14.00 ms | update=0.00 callbacks=0.00 prepare=0.00 limiter=0.00 render=9.00 wait=1.00 ms\n')
+        self.assertIsNone(summary(p, [])["callbacks_share_of_update_pct"])
+        self.assertIsNone(summary([], [])["callbacks_share_of_update_pct"])
 
     def test_grass(self):
         _, g = self.read('2026 * [NLCPU GRASS] frame=1200 candidates=342000 packed=341980 faded=20 capacity=524288 buffer=32.0 MiB\n')

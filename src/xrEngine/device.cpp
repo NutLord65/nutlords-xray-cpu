@@ -72,6 +72,8 @@ namespace
         unsigned count = 0;
         double sum_frame = 0;
         double sum_update = 0;
+        // Subset of update: seqFrame callbacks, including the level's OnFrame.
+        double sum_callbacks = 0;
         double sum_prepare = 0;
         double sum_limiter = 0;
         double sum_render = 0;
@@ -80,14 +82,15 @@ namespace
         void Reset()
         {
             count = 0;
-            sum_frame = sum_update = sum_prepare = sum_limiter = sum_render = sum_wait = 0;
+            sum_frame = sum_update = sum_callbacks = sum_prepare = sum_limiter = sum_render = sum_wait = 0;
         }
 
-        void Add(double frame, double update, double prepare, double limiter, double render, double wait)
+        void Add(double frame, double update, double callbacks, double prepare, double limiter, double render, double wait)
         {
             frame_ms[count++] = frame;
             sum_frame += frame;
             sum_update += update;
+            sum_callbacks += callbacks;
             sum_prepare += prepare;
             sum_limiter += limiter;
             sum_render += render;
@@ -102,12 +105,14 @@ namespace
 
             const unsigned p95 = (count * 95 + 99) / 100 - 1;
             const unsigned p99 = (count * 99 + 99) / 100 - 1;
-            Msg("* [NLCPU PROFILE] %u frames: main-thread avg=%.2f p95=%.2f p99=%.2f max=%.2f ms | update=%.2f prepare=%.2f limiter=%.2f render=%.2f wait=%.2f ms",
+            Msg("* [NLCPU PROFILE] %u frames: main-thread avg=%.2f p95=%.2f p99=%.2f max=%.2f ms | update=%.2f callbacks=%.2f prepare=%.2f limiter=%.2f render=%.2f wait=%.2f ms",
                 count, sum_frame / count, ordered[p95], ordered[p99], ordered[count - 1],
-                sum_update / count, sum_prepare / count, sum_limiter / count, sum_render / count, sum_wait / count);
+                sum_update / count, sum_callbacks / count, sum_prepare / count, sum_limiter / count, sum_render / count, sum_wait / count);
             Reset();
         }
     };
+    // Written and read only by the main thread. This is a subset of FrameMove() time.
+    double nlcpu_frame_callbacks_ms = 0.0;
 }
 
 BOOL psLua_ParallelGC = TRUE;
@@ -649,6 +654,7 @@ void CRenderDevice::on_idle()
         nlcpu_window.Add(
             ms(nlcpu_frame_start, nlcpu_wait_end),
             ms(nlcpu_update_start, nlcpu_update_end),
+            nlcpu_frame_callbacks_ms,
             ms(nlcpu_prepare_start, nlcpu_prepare_end),
             ms(nlcpu_limiter_start, nlcpu_limiter_end),
             ms(nlcpu_render_start, nlcpu_render_end),
@@ -826,9 +832,21 @@ void CRenderDevice::FrameMove()
 
 	ShaderBus::frame_latch();
 	
+    // The bulk of scripted gameplay reaches the engine through frame callbacks.
+    // This measures ALL seqFrame callbacks (not just Lua) and is a subset of
+    // "update"; it must never be added to update when interpreting the log.
+    // With profiling disabled, there are no additional clock reads.
+    const bool nlcpu_measure_callbacks =
+        g_nlcpu_profile != 0 && b_is_Active && !Paused() && !dwPrecacheFrame;
+    NLCPUClock::time_point nlcpu_callbacks_start;
+    if (nlcpu_measure_callbacks)
+        nlcpu_callbacks_start = NLCPUClock::now();
 	START_PROFILE("Process seqFrame");
 	Device.seqFrame.Process(rp_Frame);
 	STOP_PROFILE;
+    if (nlcpu_measure_callbacks)
+        nlcpu_frame_callbacks_ms =
+            std::chrono::duration<double, std::milli>(NLCPUClock::now() - nlcpu_callbacks_start).count();
 	
 	g_bLoaded = TRUE;
 	
