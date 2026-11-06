@@ -42,12 +42,13 @@ public :
 	{
 	}
 
-	u32 Size() { return m_p->size(); }
-	LPCSTR GetAt(u32 idx) { return m_p->at(idx); }
+	u32 Size() { return m_p ? m_p->size() : 0; }
+	LPCSTR GetAt(u32 idx) { return m_p ? m_p->at(idx) : nullptr; }
 
 	void Free()
 	{
-		FS.file_list_close(m_p);
+		if (m_p)
+			FS.file_list_close(m_p);
 	};
 };
 
