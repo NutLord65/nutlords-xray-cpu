@@ -33,6 +33,22 @@ class ParseTests(unittest.TestCase):
         self.assertEqual(summary["weighted_main_thread_avg_ms"], 18.0)
         self.assertNotIn("limiter", summary["weighted_phases_avg_ms"])
 
+    def test_callbacks_ratio_excludes_legacy_windows(self):
+        new = ("* [NLCPU PROFILE] 300 frames: main-thread avg=10.00 "
+               "p95=12.00 p99=13.00 max=14.00 ms | update=4.00 "
+               "callbacks=3.00 prepare=0.00 limiter=0.00 render=5.00 wait=1.00 ms")
+        old = ("* [NLCPU PROFILE] 300 frames: main-thread avg=10.00 "
+               "p95=12.00 p99=13.00 max=14.00 ms | update=8.00 "
+               "render=1.00 wait=1.00 ms")
+        result = report.summarize(report.parse_text(new + "\\n" + old))["cpu"]
+        self.assertEqual(result["callbacks_share_of_update_pct"], 75.0)
+        self.assertEqual(result["callbacks_coverage_frames"], 300)
+
+    def test_callbacks_ratio_empty(self):
+        result = report.summarize(report.parse_text(""))["cpu"]
+        self.assertIsNone(result["callbacks_share_of_update_pct"])
+        self.assertEqual(result["callbacks_coverage_frames"], 0)
+
     def test_grass_stats(self):
         line = ("* [NLCPU GRASS] frame=600 candidates=900 "
                 "packed=880 faded=20 capacity=262144 buffer=16.0 MiB")
