@@ -16,10 +16,11 @@ All diagnostics are off by default, to minimize runtime overhead.
 
 Every 300 non-paused/non-precache sampled frames:
 
-`[NLCPU PROFILE] 300 frames: main-thread avg=... p95=... p99=... max=... ms | update=... prepare=... limiter=... render=... wait=... ms`
+`[NLCPU PROFILE] 300 frames: main-thread avg=... p95=... p99=... max=... ms | update=... callbacks=... prepare=... limiter=... render=... wait=... ms`
 
 - **main-thread**: measured part of the main thread's frame. Not a total GPU frametime measurement.
 - **update**: direct cost of `FrameMove()`, including callbacks that run synchronously there.
+- **callbacks** (new diagnostic field): time inside `Device.seqFrame.Process(rp_Frame)`, a **subset of update**, not an additional phase. Includes CLevel and other frame callbacks (potentially Lua/AI indirectly); **not** pure Lua timing. Older v0.3/v0.4 logs omit it.
 - **prepare**: particles, camera/shader matrices, and enqueueing background work after `FrameMove`.
 - **limiter**: optional `ECO_RENDER` FPS cap/pacing wait; separated to avoid confusing capping with render overhead.
 - **render**: render submission, present/device operations; may include waiting on GPU or driver, *not* standalone GPU execution time.
