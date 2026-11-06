@@ -28,13 +28,18 @@
 
 #define CXIMAGEJPG_SUPPORT_EXIF 1
 
+// Win32 RPC headers can define `boolean` as an 8-bit type, while this
+// bundled libjpeg (C) uses a 32-bit int. Reusing Win32's type changes the
+// jpeg_compress_struct layout and can cause an out-of-bounds memset in
+// jpeg_CreateCompress. Keep libjpeg's typedef isolated to its C API headers.
+// Experimental ABI fix: not a change to gameplay, rendering, or save data.
 #define XMD_H
-#define HAVE_BOOLEAN
+#define boolean jpeg_boolean
 extern "C" {
  #include <jpeg/jpeglib.h>
  #include <jpeg/jerror.h>
 }
-#undef HAVE_BOOLEAN
+#undef boolean
 #undef XMD_H
 
 #pragma comment(lib, "libjpeg.lib")
@@ -215,7 +220,7 @@ public:
 		pDest->free_in_buffer = eBufSize;
 	}
 
-	static boolean EmptyOutputBuffer(j_compress_ptr cinfo)
+	static jpeg_boolean EmptyOutputBuffer(j_compress_ptr cinfo)
 	{
 		CxFileJpg* pDest = (CxFileJpg*)cinfo->dest;
 		if (pDest->m_pFile->Write(pDest->m_pBuffer,1,eBufSize)!=(size_t)eBufSize)
@@ -246,7 +251,7 @@ public:
 		pSource->m_bStartOfFile = TRUE;
 	}
 
-	static boolean FillInputBuffer(j_decompress_ptr cinfo)
+	static jpeg_boolean FillInputBuffer(j_decompress_ptr cinfo)
 	{
 		size_t nbytes;
 		CxFileJpg* pSource = (CxFileJpg*)cinfo->src;
