@@ -14,14 +14,14 @@ import re
 from pathlib import Path
 
 PREFIX = re.compile(
-    r"\\[NLCPU PROFILE\\]\\s+(?P<frames>\\d+) frames: "
-    r"main-thread avg=(?P<avg>[\\d.]+) p95=(?P<p95>[\\d.]+) "
-    r"p99=(?P<p99>[\\d.]+) max=(?P<max>[\\d.]+) ms\\s*\\|\\s*(?P<phases>.*)"
+    r"\[NLCPU PROFILE\]\s+(?P<frames>\d+) frames: "
+    r"main-thread avg=(?P<avg>[\d.]+) p95=(?P<p95>[\d.]+) "
+    r"p99=(?P<p99>[\d.]+) max=(?P<max>[\d.]+) ms\s*\|\s*(?P<phases>.*)"
 )
-PHASE = re.compile(r"(update|prepare|limiter|render|wait)=([\\d.]+)")
+PHASE = re.compile(r"(update|prepare|limiter|render|wait)=([\d.]+)")
 GRASS = re.compile(
-    r"\\[NLCPU GRASS\\]\\s+frame=(\\d+) candidates=(\\d+) "
-    r"packed=(\\d+) faded=(\\d+) capacity=(\\d+) buffer=([\\d.]+) MiB"
+    r"\[NLCPU GRASS\]\s+frame=(\d+) candidates=(\d+) "
+    r"packed=(\d+) faded=(\d+) capacity=(\d+) buffer=([\d.]+) MiB"
 )
 
 
@@ -131,7 +131,7 @@ def main() -> int:
     output = json.dumps(report, indent=2, ensure_ascii=False)
     print(output)
     if args.json:
-        args.json.write_text(output + "\\n", encoding="utf-8")
+        args.json.write_text(output + "\n", encoding="utf-8")
     return 0
 
 
