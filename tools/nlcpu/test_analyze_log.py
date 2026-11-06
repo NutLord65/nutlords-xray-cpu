@@ -32,15 +32,15 @@ class TestNLCPULog(unittest.TestCase):
 
     def test_callback_ratio_uses_matching_windows_only(self):
         p, _ = self.read(
-            '* [NLCPU PROFILE] 300 frames: main-thread avg=10.00 p95=12.00 p99=13.00 max=14.00 ms | update=4.00 callbacks=3.00 prepare=0.00 limiter=0.00 render=5.00 wait=1.00 ms\\n'
-            '* [NLCPU PROFILE] 300 frames: main-thread avg=10.00 p95=12.00 p99=13.00 max=14.00 ms | update=8.00 prepare=0.00 limiter=0.00 render=1.00 wait=1.00 ms\\n'
+            '* [NLCPU PROFILE] 300 frames: main-thread avg=10.00 p95=12.00 p99=13.00 max=14.00 ms | update=4.00 callbacks=3.00 prepare=0.00 limiter=0.00 render=5.00 wait=1.00 ms\n'
+            '* [NLCPU PROFILE] 300 frames: main-thread avg=10.00 p95=12.00 p99=13.00 max=14.00 ms | update=8.00 prepare=0.00 limiter=0.00 render=1.00 wait=1.00 ms\n'
         )
         result = summary(p, [])
         self.assertEqual(result["callbacks_share_of_update_pct"], 75.0)
         self.assertEqual(result["callbacks_coverage_frames"], 300)
 
     def test_callback_ratio_empty_or_zero_update(self):
-        p, _ = self.read('* [NLCPU PROFILE] 300 frames: main-thread avg=10.00 p95=12.00 p99=13.00 max=14.00 ms | update=0.00 callbacks=0.00 prepare=0.00 limiter=0.00 render=9.00 wait=1.00 ms\\n')
+        p, _ = self.read('* [NLCPU PROFILE] 300 frames: main-thread avg=10.00 p95=12.00 p99=13.00 max=14.00 ms | update=0.00 callbacks=0.00 prepare=0.00 limiter=0.00 render=9.00 wait=1.00 ms\n')
         self.assertIsNone(summary(p, [])["callbacks_share_of_update_pct"])
         self.assertIsNone(summary([], [])["callbacks_share_of_update_pct"])
 
