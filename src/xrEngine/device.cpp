@@ -54,6 +54,56 @@ BOOL g_bLoaded = FALSE;
 ref_light precache_light = 0;
 
 BOOL mt_calc_bones = TRUE;
+
+// NLCPU v0.3 diagnostic sampler. Disabled by default; no work is done unless
+// the developer explicitly enables it via the nlcpu_profile console command.
+int g_nlcpu_profile = 0;
+
+namespace
+{
+    using NLCPUClock = std::chrono::steady_clock;
+    constexpr unsigned kNLCPUWindowFrames = 300;
+
+    struct NLCPUProfileWindow
+    {
+        double frame_ms[kNLCPUWindowFrames] = {};
+        unsigned count = 0;
+        double sum_frame = 0;
+        double sum_update = 0;
+        double sum_render = 0;
+        double sum_wait = 0;
+
+        void Reset()
+        {
+            count = 0;
+            sum_frame = sum_update = sum_render = sum_wait = 0;
+        }
+
+        void Add(double frame, double update, double render, double wait)
+        {
+            frame_ms[count++] = frame;
+            sum_frame += frame;
+            sum_update += update;
+            sum_render += render;
+            sum_wait += wait;
+            if (count < kNLCPUWindowFrames)
+                return;
+
+            double ordered[kNLCPUWindowFrames];
+            for (unsigned i = 0; i < count; ++i)
+                ordered[i] = frame_ms[i];
+            std::sort(ordered, ordered + count);
+
+            const unsigned p95 = (count * 95 + 99) / 100 - 1;
+            const unsigned p99 = (count * 99 + 99) / 100 - 1;
+            Msg("* [NLCPU PROFILE] %u frames: main-thread avg=%.2f p95=%.2f p99=%.2f max=%.2f ms | update=%.2f render=%.2f wait=%.2f ms",
+                count, sum_frame / count, ordered[p95], ordered[p99], ordered[count - 1],
+                sum_update / count, sum_render / count, sum_wait / count);
+            Reset();
+        }
+    };
+}
+
 BOOL psLua_ParallelGC = TRUE;
 BOOL psLua_ParallelGC_debug = FALSE;
 
@@ -379,6 +429,22 @@ void CRenderDevice::on_idle()
 		g_SASH.StartBenchmark();
 	}
 
+    // Main-thread wall-clock profiler: never use game time (pause, timescale,
+    // smoothed fTimeDelta) for CPU measurements. No clock calls when disabled.
+    static NLCPUProfileWindow nlcpu_window;
+    static bool nlcpu_was_enabled = false;
+    const bool nlcpu_enabled = (g_nlcpu_profile != 0);
+    if (nlcpu_enabled != nlcpu_was_enabled)
+    {
+        nlcpu_window.Reset();
+        nlcpu_was_enabled = nlcpu_enabled;
+    }
+    const bool nlcpu_sample = nlcpu_enabled && b_is_Active && !Paused() && !dwPrecacheFrame;
+    NLCPUClock::time_point nlcpu_frame_start, nlcpu_update_start, nlcpu_update_end;
+    NLCPUClock::time_point nlcpu_render_start, nlcpu_render_end, nlcpu_wait_start, nlcpu_wait_end;
+    if (nlcpu_sample)
+        nlcpu_frame_start = NLCPUClock::now();
+
 	if (Device.ModelDefferClear)
 	{
 		Device.ModelDefferClear();
@@ -405,7 +471,9 @@ void CRenderDevice::on_idle()
 		Device.seqParallelBeforRender.clear();
 	}
 
+    if (nlcpu_sample) nlcpu_update_start = NLCPUClock::now();
 	FrameMove();
+    if (nlcpu_sample) nlcpu_update_end = NLCPUClock::now();
 
     if (g_pGamePersistent != nullptr)
     {
@@ -522,6 +590,7 @@ void CRenderDevice::on_idle()
 	}
 #endif // ECO_RENDER END
 
+    if (nlcpu_sample) nlcpu_render_start = NLCPUClock::now();
 #ifndef DEDICATED_SERVER
 	Statistic->RenderTOTAL_Real.FrameStart();
 	Statistic->RenderTOTAL_Real.Begin();
@@ -544,9 +613,24 @@ void CRenderDevice::on_idle()
 	Statistic->RenderTOTAL_Real.FrameEnd();
 	Statistic->RenderTOTAL.accum = Statistic->RenderTOTAL_Real.accum;
 #endif 
+    if (nlcpu_sample) nlcpu_render_end = NLCPUClock::now();
 	Device.isRendering = false;
 
+    if (nlcpu_sample) nlcpu_wait_start = NLCPUClock::now();
 	secondary_tasks.wait();
+    if (nlcpu_sample)
+    {
+        nlcpu_wait_end = NLCPUClock::now();
+        const auto ms = [](NLCPUClock::time_point start, NLCPUClock::time_point end) -> double
+        {
+            return std::chrono::duration<double, std::milli>(end - start).count();
+        };
+        nlcpu_window.Add(
+            ms(nlcpu_frame_start, nlcpu_wait_end),
+            ms(nlcpu_update_start, nlcpu_update_end),
+            ms(nlcpu_render_start, nlcpu_render_end),
+            ms(nlcpu_wait_start, nlcpu_wait_end));
+    }
 
 	if (psLua_ParallelGC_debug && psLua_ParallelGC && Device.LuaGCDebug)
 	{

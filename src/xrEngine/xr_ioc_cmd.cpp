@@ -1066,6 +1066,7 @@ extern int g_ai_unlimited_ammo;
 float g_AimLookFactor = 1.f;
 
 int ps_framelimiter = 0;
+extern int g_nlcpu_profile;
 extern u32 g_crosshair_color;
 float g_freelook_z_offset;
 float g_ironsights_factor = 1.25f;
@@ -1099,6 +1100,8 @@ void CCC_Register()
 	CMD1(CCC_SaveCFG, "cfg_save");
 	CMD1(CCC_LoadCFG, "cfg_load");
 	CMD1(CCC_DumpCVars, "dump_cvar");
+    // Development-only CPU wall-clock timing, off by default.
+    CMD4(CCC_Integer, "nlcpu_profile", &g_nlcpu_profile, 0, 1);
         CMD4(CCC_Integer, "dump_cvar_enable", &dump_cvar_enable, 0, 1);
 	CMD1(CCC_RenderDocCapture, "rdoc_capture");
 	CMD1(CCC_RenderDocOpen, "rdoc_open");
