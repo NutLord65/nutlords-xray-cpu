@@ -232,7 +232,8 @@ public:
 	// DX11 hardware instancing (DX10/R3 keeps the legacy baked-copies path).
 	// One record = 3x4 transform rows (3 float4) + half4 (terrain normal
 	// xyz + alpha) + half4 (sun, hemi, spare, spare) = 64b
-	enum { hw_InstanceStride = 64, hw_InstanceCapacity = 1 << 18 };
+	enum { hw_InstanceStride = 64, hw_InstanceInitialCapacity = 1 << 18 };
+	u32 hw_instanceCapacity; // grows geometrically; never silently discards details on overflow
 	ID3DVertexBuffer* hw_instanceVB;
 
     // instead of filling the instance buffer multiple times per frame, we will

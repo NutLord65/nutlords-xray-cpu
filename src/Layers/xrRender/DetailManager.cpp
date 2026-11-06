@@ -90,6 +90,7 @@ CDetailManager::CDetailManager()
 	hw_IB = 0;
 #ifdef USE_DX11
 	hw_instanceVB = 0;
+	hw_instanceCapacity = hw_InstanceInitialCapacity;
 	hw_frame_filled = u32(-1);
 #endif
 	m_time_rot_1 = 0;

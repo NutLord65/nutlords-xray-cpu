@@ -5,6 +5,7 @@ on:
   push:
     branches:
       - work/grass-mt-20261011
+      - work/nlcpu-v02-*
     paths:
       - 'src/**'
       - '.gitmodules'

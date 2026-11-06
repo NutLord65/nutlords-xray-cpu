@@ -181,14 +181,14 @@ void CDetailManager::hw_Load_Geom()
 	{
 		D3D_BUFFER_DESC idesc;
 		ZeroMemory(&idesc, sizeof(idesc));
-		idesc.ByteWidth = hw_InstanceCapacity * hw_InstanceStride;
+		idesc.ByteWidth = hw_instanceCapacity * hw_InstanceStride;
 		idesc.Usage = D3D_USAGE_DYNAMIC;
 		idesc.BindFlags = D3D_BIND_VERTEX_BUFFER;
 		idesc.CPUAccessFlags = D3D_CPU_ACCESS_WRITE;
 		R_CHK(HW.pDevice->CreateBuffer(&idesc, 0, &hw_instanceVB));
 		HW.stats_manager.increment_stats_vb(hw_instanceVB);
 		hw_frame_filled = u32(-1);
-		Msg("* [DETAILS] InstanceVB(%dK), cap(%d)", (hw_InstanceCapacity * hw_InstanceStride) / 1024, hw_InstanceCapacity);
+		Msg("* [DETAILS] InstanceVB(%dK), cap(%d)", (hw_instanceCapacity * hw_InstanceStride) / 1024, hw_instanceCapacity);
 	}
 #endif
 }

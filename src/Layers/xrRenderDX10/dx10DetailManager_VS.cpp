@@ -126,18 +126,17 @@ void CDetailManager::hw_Render(light* L)
 	RCache.set_Geometry(hw_Geom);
 
 #ifdef USE_DX11
-	// bind the per-instance vertex stream to slot 1 (filled once per frame in hw_Fill_Instances)
-	{
-		UINT istride = hw_InstanceStride;
-		UINT ioffset = 0;
-		HW.pContext->IASetVertexBuffers(1, 1, &hw_instanceVB, &istride, &ioffset);
-	}
-
     // fill this once per frame, and let later render phases (cascades, grass shadow lights) reuse it
 	if (hw_frame_filled != Device.dwFrame)
 	{
 		Device.Statistic->RenderDUMP_DT_Count = 0; // accumulates across phases this frame
 		hw_Fill_Instances();
+	}
+	// Bind after filling: the buffer may have been replaced by a larger allocation.
+	{
+		UINT istride = hw_InstanceStride;
+		UINT ioffset = 0;
+		HW.pContext->IASetVertexBuffers(1, 1, &hw_instanceVB, &istride, &ioffset);
 	}
 #else
 	// DX10 (R3): no instancing - the baked-copies path fills the 'array' constant per dump
@@ -181,7 +180,59 @@ void CDetailManager::hw_Render(light* L)
 #ifdef USE_DX11
 void CDetailManager::hw_Fill_Instances()
 {
-    // packs all the visible instances into a contiguous instance buffer with a single map
+    // Count upper-bound instances from slot-parts before mapping the GPU buffer.
+    // This is intentionally an upper bound (including zero-alpha instances), so
+    // fading never causes an accidental under-allocation or loss of details.
+    u64 required = 0;
+    for (u32 vid = 0; vid < 3; ++vid)
+    {
+        const vis_list& list = m_visibles[vid];
+        for (u32 obj = 0; obj < objects.size(); ++obj)
+        {
+            const xr_vector<SlotItemVec*>& groups = list[obj];
+            for (const SlotItemVec* group : groups)
+                required += group->size();
+        }
+    }
+
+    if (required > hw_instanceCapacity)
+    {
+        // D3D11_BUFFER_DESC::ByteWidth uses UINT. This is a hard API bound,
+        // not a gameplay or grass-density limit.
+        const u64 maxCapacity = u64(0xFFFFFFFFu) / hw_InstanceStride;
+        R_ASSERT2(required <= maxCapacity, "NLCPU detail instances exceed D3D11 ByteWidth");
+
+        u64 grownCapacity = hw_instanceCapacity;
+        while (grownCapacity < required)
+        {
+            if (grownCapacity > maxCapacity / 2)
+            {
+                grownCapacity = required;
+                break;
+            }
+            grownCapacity *= 2;
+        }
+
+        D3D_BUFFER_DESC desc;
+        ZeroMemory(&desc, sizeof(desc));
+        desc.ByteWidth = u32(grownCapacity * hw_InstanceStride);
+        desc.Usage = D3D_USAGE_DYNAMIC;
+        desc.BindFlags = D3D_BIND_VERTEX_BUFFER;
+        desc.CPUAccessFlags = D3D_CPU_ACCESS_WRITE;
+
+        // Create first; only release the existing buffer after success.
+        ID3DVertexBuffer* enlargedVB = nullptr;
+        R_CHK(HW.pDevice->CreateBuffer(&desc, 0, &enlargedVB));
+        HW.stats_manager.decrement_stats_vb(hw_instanceVB);
+        _RELEASE(hw_instanceVB);
+        hw_instanceVB = enlargedVB;
+        HW.stats_manager.increment_stats_vb(hw_instanceVB);
+        Msg("* [NLCPU] detail instance buffer: %u -> %u instances (%u KiB)",
+            hw_instanceCapacity, u32(grownCapacity), desc.ByteWidth / 1024);
+        hw_instanceCapacity = u32(grownCapacity);
+    }
+
+    // Pack all visible instances in one mapped contiguous GPU buffer.
 	void* pInstData;
 #ifdef USE_DX11
 	D3D11_MAPPED_SUBRESOURCE mapped;
@@ -193,7 +244,6 @@ void CDetailManager::hw_Fill_Instances()
 	InstanceHW* pInst = (InstanceHW*)pInstData;
 
 	u32 instTotal = 0;
-	BOOL bOverflow = FALSE;
 	for (u32 vid = 0; vid < 3; vid++)
 	{
 		vis_list& list = m_visibles[vid];
@@ -217,13 +267,9 @@ void CDetailManager::hw_Fill_Instances()
 					Instance.alpha += GoToValue(Instance.alpha, Instance.alpha_target);
 
 					if (Instance.alpha <= 0)
-						break;
+						continue; // skip only this fading instance, not remaining grass in the group
 
-					if (instTotal >= (u32)hw_InstanceCapacity)
-					{
-						bOverflow = TRUE;
-						break;
-					}
+					R_ASSERT2(instTotal < hw_instanceCapacity, "NLCPU instance buffer pre-count mismatch");
 
 					// 3x4 transform rows (scale pre-multiplied in UpdateVisibleM) + packed terrain-normal/alpha + sun/hemi
 					Fmatrix& M = Instance.mRotY_calculated;
@@ -241,8 +287,6 @@ void CDetailManager::hw_Fill_Instances()
 					R.sh[3] = 0;
 					instTotal++;
 				}
-				if (instTotal >= (u32)hw_InstanceCapacity)
-					break;
 			}
 			hw_inst_count[vid][O] = instTotal - hw_inst_base[vid][O];
 
@@ -257,9 +301,6 @@ void CDetailManager::hw_Fill_Instances()
 #else
 	hw_instanceVB->Unmap();
 #endif
-
-	if (bOverflow)
-		Msg("! [DETAILS] instance buffer overflow, cap(%d) - some grass dropped this frame", (u32)hw_InstanceCapacity);
 
 	hw_frame_filled = Device.dwFrame;
 }
