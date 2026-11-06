@@ -19,7 +19,7 @@ class TestNLCPULog(unittest.TestCase):
         self.assertEqual(summary(p, g)['weighted_main_mean_ms'], 10.8)
 
     def test_v04_callbacks_are_subset_of_update(self):
-        p, g = self.read('* [NLCPU PROFILE] 300 frames: main-thread avg=12.50 p95=14.20 p99=15.50 max=21.00 ms | update=4.10 callbacks=3.20 prepare=1.40 limiter=0.00 render=6.20 wait=0.80 ms\\n')
+        p, g = self.read('* [NLCPU PROFILE] 300 frames: main-thread avg=12.50 p95=14.20 p99=15.50 max=21.00 ms | update=4.10 callbacks=3.20 prepare=1.40 limiter=0.00 render=6.20 wait=0.80 ms\n')
         self.assertEqual(p[0]['callbacks_ms'], 3.2)
         self.assertEqual(summary(p, g)['weighted_callbacks_mean_ms'], 3.2)
         self.assertLessEqual(p[0]['callbacks_ms'], p[0]['update_ms'])
