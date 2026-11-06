@@ -18,7 +18,7 @@ PREFIX = re.compile(
     r"main-thread avg=(?P<avg>[\d.]+) p95=(?P<p95>[\d.]+) "
     r"p99=(?P<p99>[\d.]+) max=(?P<max>[\d.]+) ms\s*\|\s*(?P<phases>.*)"
 )
-PHASE = re.compile(r"(update|prepare|limiter|render|wait)=([\d.]+)")
+PHASE = re.compile(r"(update|callbacks|prepare|limiter|render|wait)=([\d.]+)")
 GRASS = re.compile(
     r"\[NLCPU GRASS\]\s+frame=(\d+) candidates=(\d+) "
     r"packed=(\d+) faded=(\d+) capacity=(\d+) buffer=([\d.]+) MiB"
@@ -66,7 +66,7 @@ def summarize(parsed: dict) -> dict:
             return None
         return round(sum(w["frames"] * w[key] for w in windows) / frames, 3)
 
-    phase_names = ("update", "prepare", "limiter", "render", "wait")
+    phase_names = ("update", "callbacks", "prepare", "limiter", "render", "wait")
     phases = {}
     for name in phase_names:
         available = [w for w in windows if name in w["phases_ms"]]
